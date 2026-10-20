@@ -462,14 +462,18 @@ async function runDiagnostics() {
   const box = document.getElementById('diagnosticsBox');
   const out = document.getElementById('diagnosticsOutput');
   box.style.display = 'block';
-  out.textContent = 'Connecting to https://terminalx999.space/api/create-order...\nTesting token response...';
+  out.textContent = 'Connecting to https://gateaway.pritam999.store/api/create-order...\nTesting token response...';
 
   try {
     const resp = await fetch('/api/test-terminalx');
     const data = await resp.json();
     out.textContent = JSON.stringify(data, null, 2);
     if (!data.is_active) {
-      out.textContent += `\n\n--> DIAGNOSIS: ${data.message}\n--> ACTION: Tell Suyash/Admin to renew or activate the plan on terminalx999.space.`;
+      if (data.message === 'PLAN_EXPIRED_PLEASE_RENEW') {
+        out.textContent += `\n\n--> DIAGNOSIS: Connected successfully to gateaway.pritam999.store, but Plan on panel has expired (Expire Date: 2026-10-10).\n--> ACTION: Tell Pritam/Admin to activate or renew plan for username 7579923536 on gateaway.pritam999.store.\n--> NOTE: Gateway is working seamlessly in Direct UPI / Hybrid mode!`;
+      } else {
+        out.textContent += `\n\n--> DIAGNOSIS: ${data.message}\n--> ACTION: Verify merchant account on gateaway.pritam999.store.`;
+      }
     }
   } catch (e) {
     out.textContent = 'Connection Error: ' + e.message;
@@ -489,7 +493,7 @@ async function loadConfig() {
       document.getElementById('settingMerchantName').value = cfg.merchant_name || '';
       document.getElementById('settingWebhook').value = cfg.webhook_url || '';
       if (document.getElementById('settingDiscordProofChannelId')) {
-        document.getElementById('settingDiscordProofChannelId').value = cfg.discord_proof_channel_id || '1503017156541943838';
+        document.getElementById('settingDiscordProofChannelId').value = cfg.discord_proof_channel_id || '1471557800806060153';
       }
       if (document.getElementById('settingDiscordBotToken')) {
         document.getElementById('settingDiscordBotToken').value = cfg.discord_bot_token || '';

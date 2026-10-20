@@ -65,21 +65,31 @@ def load_config():
         except Exception:
             pass
     return {
-        "user_token": "79ed535e58c8352bc5e9324130e39cc1",
+        "user_token": "00dd977d155e23ed27f2781207f5ad52",
         "merchant_name": "SS EMPIRE",
         "merchant_upi": "paytm.s3tuyo9@pty",
         "mode": "hybrid",
-        "terminalx_base_url": "https://terminalx999.space",
+        "terminalx_base_url": "https://gateaway.pritam999.store",
         "webhook_url": "",
         "discord_bot_token": "",
-        "discord_proof_channel_id": "1503017156541943838",
-        "discord_bot_webhook_url": ""
+        "discord_proof_channel_id": "1471557800806060153",
+        "discord_bot_webhook_url": "https://nayumi-music-bot.onrender.com/api/payment-webhook"
     }
 
 
 def save_config(cfg):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(cfg, f, indent=2)
+    try:
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2)
+            return
+    except Exception:
+        pass
+    try:
+        tmp_cfg = os.path.join('/tmp', 'config.json')
+        with open(tmp_cfg, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
 
 
 def load_transactions():
@@ -93,8 +103,18 @@ def load_transactions():
 
 
 def save_transactions(txns):
-    with open(TRANSACTIONS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(txns, f, indent=2)
+    try:
+        with open(TRANSACTIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(txns, f, indent=2)
+            return
+    except Exception:
+        pass
+    try:
+        tmp_txns = os.path.join('/tmp', 'transactions.json')
+        with open(tmp_txns, 'w', encoding='utf-8') as f:
+            json.dump(txns, f, indent=2)
+    except Exception:
+        pass
 
 
 def record_transaction(txn):
@@ -153,9 +173,9 @@ def send_discord_payment_proof(order_id, amount, utr, customer_name="Customer", 
     cfg = load_config()
     channel_id = (
         channel_id_override or
-        os.environ.get('DISCORD_PROOF_CHANNEL_ID') or
         cfg.get('discord_proof_channel_id') or
-        "1503017156541943838"
+        os.environ.get('DISCORD_PROOF_CHANNEL_ID') or
+        "1471557800806060153"
     ).strip()
 
     bot_token = (
@@ -301,7 +321,7 @@ def send_discord_payment_proof(order_id, amount, utr, customer_name="Customer", 
     target_webhook = bot_webhook_override or get_bot_webhook_url()
     if target_webhook and not (('127.0.0.1' in target_webhook or 'localhost' in target_webhook) and os.environ.get('RENDER')):
         try:
-            wb_res = notify_discord_bot(order_id, amount, utr, name, remark, bot_url=target_webhook, customer_mobile=customer_mobile)
+            wb_res = notify_discord_bot(order_id, amount, utr, name, remark, bot_url=target_webhook, customer_mobile=customer_mobile, channel_id=channel_id)
             result["bot_webhook"] = wb_res
         except Exception:
             pass
@@ -309,7 +329,7 @@ def send_discord_payment_proof(order_id, amount, utr, customer_name="Customer", 
     return result
 
 
-def notify_discord_bot(order_id, amount, utr, customer_name="Customer", remark="", bot_url=None, customer_mobile=""):
+def notify_discord_bot(order_id, amount, utr, customer_name="Customer", remark="", bot_url=None, customer_mobile="", channel_id=None):
     """Send payment success notification directly to Nayumi Discord Bot or Discord Channel Webhook."""
     if not bot_url:
         bot_url = get_bot_webhook_url()
@@ -370,13 +390,16 @@ def notify_discord_bot(order_id, amount, utr, customer_name="Customer", remark="
             return {"success": False, "error": str(e)}
 
     # Case 2: Nayumi Bot API Endpoint (JSON webhook)
+    cfg = load_config()
+    target_chan = str(channel_id or cfg.get('discord_proof_channel_id') or os.environ.get('DISCORD_PROOF_CHANNEL_ID') or "1471557800806060153")
     payload = {
         "order_id": str(order_id),
         "amount": str(amount),
         "utr": str(utr),
         "customer_name": str(customer_name or "Customer"),
         "customer_mobile": str(customer_mobile or ""),
-        "remark": str(remark or "")
+        "remark": str(remark or ""),
+        "channel_id": target_chan
     }
     try:
         resp = requests.post(bot_url, json=payload, timeout=5)
@@ -513,7 +536,7 @@ def safe_extract_json(resp):
 def test_terminalx():
     cfg = load_config()
     token = cfg.get('user_token', '').strip()
-    base_url = cfg.get('terminalx_base_url', 'https://terminalx999.space').rstrip('/')
+    base_url = cfg.get('terminalx_base_url', 'https://gateaway.pritam999.store').rstrip('/')
     
     test_data = {
         'customer_mobile': '9876543210',
@@ -561,7 +584,7 @@ def create_order():
     remark = data.get('remark', 'Payment').strip() or 'Payment'
     order_id = data.get('order_id', '').strip() or ('TXN' + str(int(time.time())) + str(uuid.uuid4().hex[:4])).upper()
 
-    base_url = cfg.get('terminalx_base_url', 'https://terminalx999.space').rstrip('/')
+    base_url = cfg.get('terminalx_base_url', 'https://gateaway.pritam999.store').rstrip('/')
     token = cfg.get('user_token', '').strip()
     mode = cfg.get('mode', 'hybrid')
     merchant_upi = cfg.get('merchant_upi', 'paytm.s3tuyo9@pty').strip()
@@ -751,7 +774,7 @@ def check_status():
     if not txn:
         # Check if it exists on TerminalX directly
         cfg = load_config()
-        base_url = cfg.get('terminalx_base_url', 'https://terminalx999.space').rstrip('/')
+        base_url = cfg.get('terminalx_base_url', 'https://gateaway.pritam999.store').rstrip('/')
         token = cfg.get('user_token', '').strip()
         try:
             resp = requests.post(f"{base_url}/api/check-order-status", data={
@@ -819,7 +842,7 @@ def check_status():
     # If order was created via TerminalX, poll TerminalX
     if txn.get('engine') == 'terminalx':
         cfg = load_config()
-        base_url = cfg.get('terminalx_base_url', 'https://terminalx999.space').rstrip('/')
+        base_url = cfg.get('terminalx_base_url', 'https://gateaway.pritam999.store').rstrip('/')
         token = cfg.get('user_token', '').strip()
         try:
             # 1. First check the public payment-status endpoint used by TerminalX UI
