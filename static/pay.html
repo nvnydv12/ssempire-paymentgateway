@@ -1185,7 +1185,12 @@
         return;
       }
 
-      const upiString = data.upi_intent || data.qr_data || `upi://pay?pa=paytm.s3tuyo9@pty&pn=SS%20EMPIRE&am=${paramAmount}&cu=INR&tn=${currentOrderId}`;
+      let upiString = data.upi_intent || data.qr_data || `upi://pay?pa=paytm.s3tuyo9@pty&pn=SS%20EMPIRE&am=${paramAmount}&cu=INR&tn=${currentOrderId}`;
+      // Fallback sanitize if pa has no @ (e.g. invalid merchant number from TerminalX)
+      if (upiString && upiString.includes('pa=') && !upiString.match(/pa=[^&]+@/)) {
+        const fallbackPa = data.merchant_upi || 'paytm.s3tuyo9@pty';
+        upiString = upiString.replace(/pa=[^&]+/, `pa=${fallbackPa}`);
+      }
 
       // Render Dynamic QR
       const qrEl = document.getElementById('payQrCode');

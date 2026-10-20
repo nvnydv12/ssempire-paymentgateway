@@ -11,10 +11,15 @@ import requests
 from functools import wraps
 from flask import Flask, jsonify, request, send_from_directory, send_file, session, redirect, url_for
 
-app = Flask(__name__, static_folder='static', static_url_path='')
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
+TRANSACTIONS_FILE = os.path.join(BASE_DIR, 'transactions.json')
+
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.secret_key = 'ssempire_secret_key_2026_' + str(uuid.uuid4().hex[:8])
 
-# 24/7 Keep-Alive Background Pinger for Render
+# 24/7 Keep-Alive Background Pinger for Render (disabled on Vercel)
 def start_keep_alive():
     def pinger():
         time.sleep(30)
@@ -28,11 +33,8 @@ def start_keep_alive():
     t = threading.Thread(target=pinger, daemon=True)
     t.start()
 
-start_keep_alive()
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
-TRANSACTIONS_FILE = os.path.join(BASE_DIR, 'transactions.json')
+if not os.environ.get('VERCEL'):
+    start_keep_alive()
 
 # Admin credentials
 ADMIN_USERS = {
@@ -58,6 +60,13 @@ def get_public_url():
 
 
 def load_config():
+    tmp_cfg = os.path.join('/tmp', 'config.json')
+    if os.path.exists(tmp_cfg):
+        try:
+            with open(tmp_cfg, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -93,6 +102,13 @@ def save_config(cfg):
 
 
 def load_transactions():
+    tmp_txns = os.path.join('/tmp', 'transactions.json')
+    if os.path.exists(tmp_txns):
+        try:
+            with open(tmp_txns, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
     if os.path.exists(TRANSACTIONS_FILE):
         try:
             with open(TRANSACTIONS_FILE, 'r', encoding='utf-8') as f:
@@ -448,7 +464,7 @@ def trigger_payment_success_notification(txn):
 
 @app.route('/')
 def serve_index():
-    return send_from_directory('static', 'index.html')
+    return send_from_directory(STATIC_DIR, 'index.html')
 
 
 @app.route('/health')
@@ -463,14 +479,14 @@ def health_check():
 
 @app.route('/pay')
 def serve_pay():
-    return send_from_directory('static', 'pay.html')
+    return send_from_directory(STATIC_DIR, 'pay.html')
 
 
 @app.route('/login', methods=['GET'])
 def serve_login():
     if session.get('admin_logged_in'):
         return redirect('/admin')
-    return send_from_directory('static', 'login.html')
+    return send_from_directory(STATIC_DIR, 'login.html')
 
 
 @app.route('/api/login', methods=['POST'])
@@ -496,7 +512,7 @@ def logout():
 @app.route('/admin')
 @login_required
 def serve_admin():
-    return send_from_directory('static', 'admin.html')
+    return send_from_directory(STATIC_DIR, 'admin.html')
 
 
 @app.route('/api/config', methods=['GET'])
@@ -597,6 +613,18 @@ def create_order():
     # If order_id already exists, return existing order session to keep timer synced
     existing_txn = get_transaction(order_id)
     if existing_txn:
+        # Sanitize VPA if stored upi_intent has invalid VPA without @
+        existing_intent = existing_txn.get('upi_intent') or ''
+        pa_match = re.search(r'pa=([^&]+)', existing_intent)
+        if not pa_match or '@' not in pa_match.group(1):
+            if pa_match:
+                existing_intent = re.sub(r'pa=[^&]+', f'pa={merchant_upi}', existing_intent)
+            else:
+                existing_intent = f"upi://pay?pa={merchant_upi}&pn={requests.utils.quote(merchant_name)}&am={existing_txn.get('amount', amount)}&cu=INR&tn={requests.utils.quote(order_id)}"
+            existing_txn['upi_intent'] = existing_intent
+            existing_txn['qr_data'] = existing_intent
+            record_transaction(existing_txn)
+
         now_ts = int(time.time())
         expires_at = existing_txn.get('expires_at')
         if not expires_at and existing_txn.get('date'):
@@ -667,8 +695,19 @@ def create_order():
                             custom_intent = re.sub(r'PRITAM999', 'SSEMPIRE', custom_intent, flags=re.IGNORECASE)
                             # Clean out restrictive mode=04 so PhonePe/GPay directly open standard bank payment
                             upi_intent = re.sub(r'[&?]mode=04', '', custom_intent)
+
+                            # CRITICAL NPCI FIX: Ensure VPA (pa) contains valid bank handle '@'
+                            pa_m = re.search(r'pa=([^&]+)', upi_intent)
+                            if not pa_m or '@' not in pa_m.group(1):
+                                if pa_m:
+                                    upi_intent = re.sub(r'pa=[^&]+', f'pa={merchant_upi}', upi_intent)
+                                else:
+                                    upi_intent += f"&pa={merchant_upi}"
                     except Exception:
                         pass
+
+                if not upi_intent:
+                    upi_intent = f"upi://pay?pa={merchant_upi}&pn={requests.utils.quote(merchant_name)}&am={amount}&cu=INR&tn={requests.utils.quote(order_id)}"
 
                 now_ts = int(time.time())
                 expires_at = now_ts + 600  # Real 10-minute validity
@@ -1089,6 +1128,12 @@ def serve_qr_image(order_id):
     
     if txn and (txn.get('upi_intent') or txn.get('qr_data')):
         upi_data = txn.get('upi_intent') or txn.get('qr_data')
+        pa_match = re.search(r'pa=([^&]+)', upi_data)
+        if not pa_match or '@' not in pa_match.group(1):
+            if pa_match:
+                upi_data = re.sub(r'pa=[^&]+', f'pa={merchant_upi}', upi_data)
+            else:
+                upi_data += f"&pa={merchant_upi}"
     else:
         upi_data = f"upi://pay?pa={merchant_upi}&pn={requests.utils.quote(merchant_name)}&tn={requests.utils.quote(order_id)}&cu=INR"
     
