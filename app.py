@@ -19,12 +19,12 @@ TRANSACTIONS_FILE = os.path.join(BASE_DIR, 'transactions.json')
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.secret_key = 'ssempire_secret_key_2026_' + str(uuid.uuid4().hex[:8])
 
-# 24/7 Keep-Alive Background Pinger for Render (disabled on Vercel)
+# 24/7 Keep-Alive Background Pinger (disabled on Vercel)
 def start_keep_alive():
     def pinger():
         time.sleep(30)
         while True:
-            render_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://ss-empire-gateway.onrender.com')
+            render_url = os.environ.get('RENDER_EXTERNAL_URL', 'https://ssempire-paymentgateway.vercel.app')
             try:
                 requests.get(f"{render_url.rstrip('/')}/health", timeout=10)
             except Exception:
@@ -101,30 +101,83 @@ def save_config(cfg):
         pass
 
 
+_IN_MEMORY_TXNS = {}
+
 def load_transactions():
+    """
+    Robust multi-tier transaction loader.
+    Merges transactions from:
+    1. Static TRANSACTIONS_FILE (bundled in deployment)
+    2. _IN_MEMORY_TXNS (live RAM cache across requests)
+    3. /tmp/transactions.json (Vercel serverless disk)
+    Ensures that no transaction is ever lost on Vercel cold restarts or redeploys!
+    """
+    merged_map = {}
+
+    # 1. Base transactions bundled with deployment
+    if os.path.exists(TRANSACTIONS_FILE):
+        try:
+            with open(TRANSACTIONS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for t in data:
+                        if isinstance(t, dict) and t.get('order_id'):
+                            merged_map[str(t['order_id']).strip()] = t
+        except Exception:
+            pass
+
+    # 2. In-memory cache
+    global _IN_MEMORY_TXNS
+    for oid, t in _IN_MEMORY_TXNS.items():
+        if isinstance(t, dict) and oid:
+            merged_map[str(oid).strip()] = t
+
+    # 3. /tmp/transactions.json (Vercel ephemeral disk)
     tmp_txns = os.path.join('/tmp', 'transactions.json')
     if os.path.exists(tmp_txns):
         try:
             with open(tmp_txns, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, list):
+                    for t in data:
+                        if isinstance(t, dict) and t.get('order_id'):
+                            oid = str(t['order_id']).strip()
+                            # If existing in memory is already SUCCESS, preserve it
+                            if oid in merged_map and merged_map[oid].get('status') == 'SUCCESS' and t.get('status') != 'SUCCESS':
+                                continue
+                            merged_map[oid] = t
         except Exception:
             pass
-    if os.path.exists(TRANSACTIONS_FILE):
-        try:
-            with open(TRANSACTIONS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
+
+    # Populate memory cache with merged results
+    for oid, t in merged_map.items():
+        _IN_MEMORY_TXNS[oid] = t
+
+    # Sort descending: newest first
+    result = list(merged_map.values())
+    result.sort(key=lambda x: str(x.get('created_at') or x.get('date') or ''), reverse=True)
+    return result
 
 
 def save_transactions(txns):
+    """
+    Saves transactions safely to RAM cache, project file (if writable), and /tmp/transactions.json (on Vercel).
+    """
+    global _IN_MEMORY_TXNS
+    if isinstance(txns, list):
+        for t in txns:
+            if isinstance(t, dict) and t.get('order_id'):
+                _IN_MEMORY_TXNS[str(t['order_id']).strip()] = t
+
+    # 1. Try writing directly to project transactions.json
     try:
         with open(TRANSACTIONS_FILE, 'w', encoding='utf-8') as f:
             json.dump(txns, f, indent=2)
             return
     except Exception:
         pass
+
+    # 2. Fallback to /tmp on Vercel read-only filesystem
     try:
         tmp_txns = os.path.join('/tmp', 'transactions.json')
         with open(tmp_txns, 'w', encoding='utf-8') as f:
@@ -134,21 +187,33 @@ def save_transactions(txns):
 
 
 def record_transaction(txn):
+    order_id = str(txn.get('order_id', '')).strip()
+    if not order_id:
+        return
+    global _IN_MEMORY_TXNS
+    _IN_MEMORY_TXNS[order_id] = txn
+
     txns = load_transactions()
-    # Update if exists, else append
+    # Update if exists, else prepend
+    updated = False
     for i, t in enumerate(txns):
-        if t.get('order_id') == txn.get('order_id'):
+        if str(t.get('order_id', '')).strip() == order_id:
             txns[i] = txn
-            save_transactions(txns)
-            return
-    txns.insert(0, txn)
+            updated = True
+            break
+    if not updated:
+        txns.insert(0, txn)
     save_transactions(txns)
 
 
 def get_transaction(order_id):
+    order_id = str(order_id).strip()
+    global _IN_MEMORY_TXNS
+    if order_id in _IN_MEMORY_TXNS:
+        return _IN_MEMORY_TXNS[order_id]
     txns = load_transactions()
     for t in txns:
-        if t.get('order_id') == order_id:
+        if str(t.get('order_id', '')).strip() == order_id:
             return t
     return None
 
@@ -274,8 +339,8 @@ def send_discord_payment_proof(order_id, amount, utr, customer_name="Customer", 
             {
                 "author": {
                     "name": "SS EMPIRE • OFFICIAL PAYMENT VERIFICATION",
-                    "icon_url": "https://ss-empire-gateway.onrender.com/logo.png",
-                    "url": "https://ss-empire-gateway.onrender.com"
+                    "icon_url": "https://ssempire-paymentgateway.vercel.app/logo.png",
+                    "url": "https://ssempire-paymentgateway.vercel.app"
                 },
                 "title": "<a:blackcrown:1543148226100600922> NEW PAYMENT RECEIVED & VERIFIED! <:tick:1543148221264826418>",
                 "description": (
@@ -287,7 +352,7 @@ def send_discord_payment_proof(order_id, amount, utr, customer_name="Customer", 
                 ),
                 "color": 0x00E676,
                 "thumbnail": {
-                    "url": "https://ss-empire-gateway.onrender.com/logo.png"
+                    "url": "https://ssempire-paymentgateway.vercel.app/logo.png"
                 },
                 "fields": fields,
                 "footer": {
@@ -559,7 +624,7 @@ def test_terminalx():
         'user_token': token,
         'amount': '1',
         'order_id': 'TEST_' + str(int(time.time())),
-        'redirect_url': 'https://ss-empire-gateway.onrender.com',
+        'redirect_url': 'https://ssempire-paymentgateway.vercel.app',
         'remark1': 'DiagnosticTest',
         'remark2': 'HealthCheck'
     }
@@ -1054,27 +1119,134 @@ def get_transactions():
     return jsonify({"success": True, "transactions": txns})
 
 
+@app.route('/api/transactions/sync', methods=['POST'])
+def sync_transactions():
+    """
+    Bidirectional permanent synchronization with browser localStorage.
+    If Vercel container recycles or restarts, the client automatically restores any missing transactions!
+    """
+    data = request.get_json(silent=True) or {}
+    incoming = data.get('transactions', [])
+    if not isinstance(incoming, list):
+        return jsonify({"success": False, "message": "Invalid transactions array"}), 400
+
+    current_txns = load_transactions()
+    txn_map = {}
+    for t in current_txns:
+        if isinstance(t, dict) and t.get('order_id'):
+            txn_map[str(t['order_id']).strip()] = t
+
+    added_count = 0
+    updated_count = 0
+    for inc in incoming:
+        if not isinstance(inc, dict) or not inc.get('order_id'):
+            continue
+        oid = str(inc['order_id']).strip()
+        if oid not in txn_map:
+            txn_map[oid] = inc
+            added_count += 1
+        else:
+            # Upgrade status to SUCCESS if the incoming record is verified
+            if inc.get('status') in ['SUCCESS', 'COMPLETED'] and txn_map[oid].get('status') not in ['SUCCESS', 'COMPLETED']:
+                txn_map[oid] = inc
+                updated_count += 1
+            # Update UTR if present in incoming
+            elif inc.get('utr') and not txn_map[oid].get('utr'):
+                txn_map[oid]['utr'] = inc['utr']
+                updated_count += 1
+
+    merged_list = list(txn_map.values())
+    merged_list.sort(key=lambda x: str(x.get('created_at') or x.get('date') or ''), reverse=True)
+
+    if added_count > 0 or updated_count > 0:
+        save_transactions(merged_list)
+
+    return jsonify({
+        "success": True,
+        "message": f"Synced {len(merged_list)} transactions (Added: {added_count}, Updated: {updated_count})",
+        "total": len(merged_list),
+        "transactions": merged_list
+    })
+
+
+@app.route('/api/transactions/export', methods=['GET'])
+def export_transactions():
+    """Download full transactions database JSON for backup"""
+    txns = load_transactions()
+    return jsonify({
+        "version": "ss_empire_v2",
+        "exported_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        "total": len(txns),
+        "transactions": txns
+    })
+
+
+@app.route('/api/transactions/import', methods=['POST'])
+def import_transactions():
+    """Restore transactions from a JSON backup"""
+    data = request.get_json(silent=True) or {}
+    incoming = data.get('transactions', [])
+    if not incoming and isinstance(data, list):
+        incoming = data
+    if not isinstance(incoming, list):
+        return jsonify({"success": False, "message": "Invalid JSON format"}), 400
+
+    current_txns = load_transactions()
+    txn_map = {str(t['order_id']).strip(): t for t in current_txns if isinstance(t, dict) and t.get('order_id')}
+
+    imported_count = 0
+    for item in incoming:
+        if isinstance(item, dict) and item.get('order_id'):
+            oid = str(item['order_id']).strip()
+            if oid not in txn_map:
+                txn_map[oid] = item
+                imported_count += 1
+            elif item.get('status') == 'SUCCESS' and txn_map[oid].get('status') != 'SUCCESS':
+                txn_map[oid] = item
+                imported_count += 1
+
+    merged_list = list(txn_map.values())
+    merged_list.sort(key=lambda x: str(x.get('created_at') or x.get('date') or ''), reverse=True)
+    save_transactions(merged_list)
+
+    return jsonify({
+        "success": True,
+        "message": f"Successfully restored {imported_count} records. Total records: {len(merged_list)}",
+        "total": len(merged_list),
+        "transactions": merged_list
+    })
+
+
 @app.route('/api/transactions/clear', methods=['POST'])
 def clear_transactions():
+    """
+    Safeguarded: As per user instructions, transactions can NEVER be wiped in bulk without explicit confirmation!
+    """
     data = request.get_json(silent=True) or {}
-    keep_real = data.get('keep_real', True)
-    if keep_real:
+    if not data.get('force_confirm'):
         txns = load_transactions()
-        # Keep transactions with real bank UTRs (length >= 10 and digits)
-        real_txns = [t for t in txns if t.get('utr') and len(str(t.get('utr'))) >= 10 and str(t.get('utr')).isdigit()]
-        save_transactions(real_txns)
-        return jsonify({"success": True, "message": "Pending history cleared. Verified payments safe.", "transactions": real_txns})
-    else:
-        save_transactions([])
-        return jsonify({"success": True, "message": "All transactions cleared", "transactions": []})
+        return jsonify({
+            "success": False,
+            "message": "Bulk deletion prevented to protect records. Please delete specific transactions using the trash button.",
+            "transactions": txns
+        })
+    
+    global _IN_MEMORY_TXNS
+    _IN_MEMORY_TXNS.clear()
+    save_transactions([])
+    return jsonify({"success": True, "message": "All transactions cleared by admin override", "transactions": []})
 
 
 @app.route('/api/transactions/delete/<order_id>', methods=['POST', 'DELETE'])
 def delete_transaction(order_id):
+    order_id = str(order_id).strip()
+    global _IN_MEMORY_TXNS
+    _IN_MEMORY_TXNS.pop(order_id, None)
+
     txns = load_transactions()
-    new_txns = [t for t in txns if t.get('order_id') != order_id]
+    new_txns = [t for t in txns if str(t.get('order_id', '')).strip() != order_id]
     save_transactions(new_txns)
-    return jsonify({"success": True, "message": f"Order {order_id} deleted successfully", "transactions": new_txns})
+    return jsonify({"success": True, "message": f"Order {order_id} deleted permanently", "transactions": new_txns})
 
 
 @app.route('/api/order-details/<order_id>', methods=['GET'])

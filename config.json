@@ -8,5 +8,6 @@
   "telegram_bot_token": "",
   "discord_bot_token": "",
   "discord_proof_channel_id": "1471557800806060153",
-  "discord_bot_webhook_url": "https://nayumi-music-bot.onrender.com/api/payment-webhook"
+  "discord_bot_webhook_url": "https://nayumi-music-bot.onrender.com/api/payment-webhook",
+  "gateway_url": "https://ssempire-paymentgateway.vercel.app"
 }

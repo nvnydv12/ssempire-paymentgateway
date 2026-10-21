@@ -7,7 +7,7 @@ This API allows any Telegram Bot, Discord Bot, or custom app to generate dynamic
 
 ## 🌐 Permanent 24/7 Live Cloud Base URL:
 ```
-https://ss-empire-gateway.onrender.com
+https://ssempire-paymentgateway.vercel.app
 ```
 *(Hosted 24/7 on Cloud - Runs without your PC!)*
 
@@ -38,7 +38,7 @@ Creates a live order on the SS EMPIRE gateway and returns the UPI deep link + di
   "order_id": "TXN1789924627C92E",
   "amount": "50",
   "merchant_name": "SS EMPIRE",
-  "qr_image_url": "https://ss-empire-gateway.onrender.com/api/qr-image/TXN1789924627C92E",
+  "qr_image_url": "https://ssempire-paymentgateway.vercel.app/api/qr-image/TXN1789924627C92E",
   "upi_intent": "upi://pay?pa=paytm.s3tuyo9@pty&pn=SS%20EMPIRE&tr=TXN1789924627C92E&tn=SSEMPIRE%20...&am=50.00&cu=INR",
   "message": "Order created via TerminalX"
 }
@@ -106,7 +106,7 @@ Poll this endpoint every 3–5 seconds to check if the customer has paid.
 const axios = require('axios');
 const { EmbedBuilder } = require('discord.js');
 
-const GATEWAY = 'https://ss-empire-gateway.onrender.com';
+const GATEWAY = 'https://ssempire-paymentgateway.vercel.app';
 
 async function createDiscordPayment(channel, amount, user) {
     // 1. Create order
@@ -155,7 +155,7 @@ import time
 import requests
 import telebot
 
-GATEWAY = "https://ss-empire-gateway.onrender.com"
+GATEWAY = "https://ssempire-paymentgateway.vercel.app"
 bot = telebot.TeleBot("YOUR_BOT_TOKEN")
 
 @bot.message_handler(commands=['pay'])
@@ -197,12 +197,12 @@ bot.infinity_polling()
 ### 3. cURL (Terminal / Postman)
 ```bash
 # 1. Create Order
-curl -X POST https://ss-empire-gateway.onrender.com/api/create-order \
+curl -X POST https://ssempire-paymentgateway.vercel.app/api/create-order \
      -H "Content-Type: application/json" \
      -d '{"amount": "50", "customer_name": "Bunny"}'
 
 # 2. Check Status
-curl -X POST https://ss-empire-gateway.onrender.com/api/check-status \
+curl -X POST https://ssempire-paymentgateway.vercel.app/api/check-status \
      -H "Content-Type: application/json" \
      -d '{"order_id": "TXN1789924627C92E"}'
 ```
@@ -213,7 +213,7 @@ curl -X POST https://ss-empire-gateway.onrender.com/api/check-status \
 
 Whenever a customer payment is confirmed (**`status = SUCCESS`** via bank polling, UTR verification, webhook callback, or admin simulator), the SS EMPIRE Payment Gateway calls Discord's official REST API using the Bot Token. 
 
-This posts the proof directly into the Discord channel **AS OUR BOT (Nayumi 🎀)** with an `@everyone` tag and verified embed — without relying on any local bot server or suspended Render endpoints!
+This posts the proof directly into the Discord channel **AS OUR BOT (Nayumi 🎀)** with an `@everyone` tag and verified embed — without relying on any local bot server or suspended Vercel endpoints!
 
 ### API Endpoint:
 * **Endpoint:** `POST https://discord.com/api/v10/channels/<PROOF_CHANNEL_ID>/messages`
@@ -246,7 +246,7 @@ This posts the proof directly into the Discord channel **AS OUR BOT (Nayumi 🎀
 ### Test Proof Endpoint:
 To send a live test proof to your Discord channel at any time:
 ```bash
-curl -X POST https://ss-empire-gateway.onrender.com/api/test-discord-bot-webhook \
+curl -X POST https://ssempire-paymentgateway.vercel.app/api/test-discord-bot-webhook \
      -H "Content-Type: application/json" \
      -d '{"order_id": "TEST_PROOF_101", "amount": "100", "utr": "760366829987", "customer_name": "Test User", "remark": "Discord_Test"}'
 ```

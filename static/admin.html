@@ -124,9 +124,11 @@
             <h2 class="card-title">Transaction History</h2>
             <p class="card-subtitle">Live records of all orders, payments, and UTRs</p>
           </div>
-          <div style="display:flex; gap:8px;">
-            <button class="btn btn-secondary btn-sm" id="btnRefreshTxns">Refresh</button>
-            <button class="btn btn-secondary btn-sm" id="btnClearDemoTxns" style="border-color: rgba(255,50,50,0.3); color:#ff6b6b;">Clear Pending</button>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" id="btnRefreshTxns">🔄 Refresh</button>
+            <button class="btn btn-secondary btn-sm" id="btnExportTxns" style="border-color: rgba(0,230,118,0.4); color:#00e676;">📥 Export Backup</button>
+            <button class="btn btn-secondary btn-sm" id="btnImportTxns" style="border-color: rgba(0,229,255,0.4); color:#00e5ff;">📤 Import Backup</button>
+            <input type="file" id="importTxnFile" accept=".json" style="display:none;">
           </div>
         </div>
 
@@ -255,26 +257,26 @@
           </div>
         </div>
 
-        <!-- Render Base URL & Ready API Links Box -->
-        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,23,68,0.3); border-radius:14px; padding:20px; margin-bottom:24px;">
+        <!-- Vercel Base URL & Ready API Links Box -->
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(0,230,118,0.3); border-radius:14px; padding:20px; margin-bottom:24px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-            <div style="font-size:0.85rem; font-weight:700; color:#ff5252; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+            <div style="font-size:0.85rem; font-weight:700; color:#00e676; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              Render Live Cloud API (24/7 Permanent Gateway)
+              Vercel Live Cloud API (24/7 Live Gateway)
             </div>
-            <a href="https://ss-empire-gateway.onrender.com" target="_blank" style="font-size:0.75rem; color:#00e676; text-decoration:none; display:inline-flex; align-items:center; gap:4px; background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.3); padding:4px 10px; border-radius:20px; font-weight:600;">
+            <a href="https://ssempire-paymentgateway.vercel.app" id="openLiveSiteLink" target="_blank" style="font-size:0.75rem; color:#00e676; text-decoration:none; display:inline-flex; align-items:center; gap:4px; background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.3); padding:4px 10px; border-radius:20px; font-weight:600;">
               <span style="width:6px; height:6px; border-radius:50%; background:#00e676; box-shadow:0 0 8px #00e676;"></span>
-              Open Render Live Site ↗
+              Open Vercel Live Site ↗
             </a>
           </div>
 
           <!-- Main Base URL Box -->
           <div style="margin-bottom:18px;">
             <span style="font-size:0.82rem; font-weight:600; color:#ffffff; display:block; margin-bottom:6px;">
-              🌐 <b>Render Permanent Base URL</b> (Use this in your Discord Bot, Telegram Bot, or Backend App):
+              🌐 <b>Vercel Gateway Base URL</b> (Use this in your Discord Bot, Telegram Bot, or Backend App):
             </span>
             <div style="display:flex; gap:8px; align-items:center;">
-              <input type="text" readonly value="https://ss-empire-gateway.onrender.com" class="copy-field" id="cloudBaseUrl" style="background:#08090c; border:1.5px solid rgba(0,230,118,0.45); border-radius:8px; padding:12px 14px; font-family:'JetBrains Mono',monospace; color:#00e676; font-size:0.95rem; font-weight:700; flex:1;">
+              <input type="text" readonly value="https://ssempire-paymentgateway.vercel.app" class="copy-field" id="cloudBaseUrl" style="background:#08090c; border:1.5px solid rgba(0,230,118,0.45); border-radius:8px; padding:12px 14px; font-family:'JetBrains Mono',monospace; color:#00e676; font-size:0.95rem; font-weight:700; flex:1;">
               <button type="button" class="btn btn-primary btn-sm btn-copy-api" data-target="cloudBaseUrl" style="padding:10px 16px; white-space:nowrap;">📋 Copy Base URL</button>
             </div>
           </div>
@@ -291,7 +293,7 @@
                 <span style="color:#00e676; font-family:monospace; font-weight:700;">POST</span>
               </div>
               <div style="display:flex; gap:8px;">
-                <input type="text" readonly value="https://ss-empire-gateway.onrender.com/api/create-order" class="copy-field" id="apiCreateOrder" style="background:#08090c; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; font-family:'JetBrains Mono',monospace; color:#f1f5f9; font-size:0.85rem; flex:1;">
+                <input type="text" readonly value="https://ssempire-paymentgateway.vercel.app/api/create-order" class="copy-field" id="apiCreateOrder" style="background:#08090c; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; font-family:'JetBrains Mono',monospace; color:#f1f5f9; font-size:0.85rem; flex:1;">
                 <button type="button" class="btn btn-secondary btn-sm btn-copy-api" data-target="apiCreateOrder">📋 Copy</button>
               </div>
             </div>
@@ -302,7 +304,7 @@
                 <span style="color:#ffab00; font-family:monospace; font-weight:700;">POST</span>
               </div>
               <div style="display:flex; gap:8px;">
-                <input type="text" readonly value="https://ss-empire-gateway.onrender.com/api/check-status" class="copy-field" id="apiCheckStatus" style="background:#08090c; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; font-family:'JetBrains Mono',monospace; color:#f1f5f9; font-size:0.85rem; flex:1;">
+                <input type="text" readonly value="https://ssempire-paymentgateway.vercel.app/api/check-status" class="copy-field" id="apiCheckStatus" style="background:#08090c; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; font-family:'JetBrains Mono',monospace; color:#f1f5f9; font-size:0.85rem; flex:1;">
                 <button type="button" class="btn btn-secondary btn-sm btn-copy-api" data-target="apiCheckStatus">📋 Copy</button>
               </div>
             </div>
@@ -313,17 +315,17 @@
                 <span style="color:#00b0ff; font-family:monospace; font-weight:700;">GET</span>
               </div>
               <div style="display:flex; gap:8px;">
-                <input type="text" readonly value="https://ss-empire-gateway.onrender.com/pay" class="copy-field" id="apiPayPage" style="background:#08090c; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; font-family:'JetBrains Mono',monospace; color:#f1f5f9; font-size:0.85rem; flex:1;">
+                <input type="text" readonly value="https://ssempire-paymentgateway.vercel.app/pay" class="copy-field" id="apiPayPage" style="background:#08090c; border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; font-family:'JetBrains Mono',monospace; color:#f1f5f9; font-size:0.85rem; flex:1;">
                 <button type="button" class="btn btn-secondary btn-sm btn-copy-api" data-target="apiPayPage">📋 Copy</button>
               </div>
             </div>
           </div>
 
           <!-- Easy Step Instructions in Professional English -->
-          <div style="margin-top:14px; padding:12px 14px; background:rgba(255,23,68,0.06); border-left:3px solid #ff1744; border-radius:6px; font-size:0.8rem; line-height:1.6; color:#e2e8f0;">
-            <b style="color:#ff5252;">💡 How to Connect with Bots or Web Apps:</b><br>
-            • <b>Step 1:</b> In your Discord Bot, Telegram Bot, or backend code, set <code>BASE_URL = "https://ss-empire-gateway.onrender.com"</code>.<br>
-            • <b>Step 2:</b> When a user initiates a payment (e.g. <code>!pay 100</code>), send a POST request with the amount to <code>/api/create-order</code> to receive the dynamic QR code image URL.<br>
+          <div style="margin-top:14px; padding:12px 14px; background:rgba(0,230,118,0.06); border-left:3px solid #00e676; border-radius:6px; font-size:0.8rem; line-height:1.6; color:#e2e8f0;">
+            <b style="color:#00e676;">💡 How to Connect with Bots or Web Apps:</b><br>
+            • <b>Step 1:</b> In your Discord Bot, Telegram Bot, or backend code, set <code>BASE_URL = "https://ssempire-paymentgateway.vercel.app"</code>.<br>
+            • <b>Step 2:</b> When a user initiates a payment (e.g. <code>!pay 100</code> or <code>!qr 100</code>), send a POST request with the amount to <code>/api/create-order</code> to receive the dynamic QR code image URL.<br>
             • <b>Step 3:</b> Poll <code>/api/check-status</code> every 3 seconds to verify payment in real-time. Upon SUCCESS, retrieve the 12-digit Bank UTR and grant role/access automatically!
           </div>
         </div>
@@ -415,7 +417,7 @@
             <pre class="sdk-code-box" id="code-python" style="display:block; margin:0; font-family:'JetBrains Mono',monospace; font-size:0.84rem; color:#f1f5f9; overflow-x:auto; line-height:1.5;">import requests
 import time
 
-BASE_URL = "https://ss-empire-gateway.onrender.com"
+BASE_URL = "https://ssempire-paymentgateway.vercel.app"
 
 # 1. Create Order & Generate Dynamic UPI QR
 order_payload = {
@@ -457,7 +459,7 @@ import requests
 import asyncio
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
-GATEWAY_URL = "https://ss-empire-gateway.onrender.com"
+GATEWAY_URL = "https://ssempire-paymentgateway.vercel.app"
 
 @bot.command()
 async def pay(ctx, amount: str = "100"):
@@ -514,7 +516,7 @@ import requests
 import time
 
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-GATEWAY_URL = "https://ss-empire-gateway.onrender.com"
+GATEWAY_URL = "https://ssempire-paymentgateway.vercel.app"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 @bot.message_handler(commands=['pay'])
@@ -574,7 +576,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 public class SSEmpireGateway {
-    private static final String BASE_URL = "https://ss-empire-gateway.onrender.com";
+    private static final String BASE_URL = "https://ssempire-paymentgateway.vercel.app";
 
     public static void main(String[] args) throws Exception {
         HttpClient client = HttpClient.newHttpClient();
@@ -614,7 +616,7 @@ public class SSEmpireGateway {
             <!-- Node.js -->
             <pre class="sdk-code-box" id="code-node" style="display:none; margin:0; font-family:'JetBrains Mono',monospace; font-size:0.84rem; color:#f1f5f9; overflow-x:auto; line-height:1.5;">const axios = require('axios');
 
-const BASE_URL = 'https://ss-empire-gateway.onrender.com';
+const BASE_URL = 'https://ssempire-paymentgateway.vercel.app';
 
 async function processPayment(amount, customerName, remark) {
   try {
@@ -656,7 +658,7 @@ processPayment(100, 'Suyash', 'VIP Pass');</pre>
 
             <!-- PHP -->
             <pre class="sdk-code-box" id="code-php" style="display:none; margin:0; font-family:'JetBrains Mono',monospace; font-size:0.84rem; color:#f1f5f9; overflow-x:auto; line-height:1.5;">&lt;?php
-$baseUrl = "https://ss-empire-gateway.onrender.com";
+$baseUrl = "https://ssempire-paymentgateway.vercel.app";
 
 // 1. Create Order
 $payload = json_encode([
@@ -686,17 +688,17 @@ if ($orderData && $orderData['success']) {
 
             <!-- cURL -->
             <pre class="sdk-code-box" id="code-curl" style="display:none; margin:0; font-family:'JetBrains Mono',monospace; font-size:0.84rem; color:#f1f5f9; overflow-x:auto; line-height:1.5;"># 1. Create UPI Order
-curl -X POST "https://ss-empire-gateway.onrender.com/api/create-order" \
+curl -X POST "https://ssempire-paymentgateway.vercel.app/api/create-order" \
      -H "Content-Type: application/json" \
      -d '{"amount": "100", "customer_name": "Suyash", "remark": "Test"}'
 
 # 2. Check Order Status & Bank UTR
-curl -X POST "https://ss-empire-gateway.onrender.com/api/check-status" \
+curl -X POST "https://ssempire-paymentgateway.vercel.app/api/check-status" \
      -H "Content-Type: application/json" \
      -d '{"order_id": "TXN1789924627C92E"}'
 
 # 3. Verify Payment via 12-digit Bank UTR
-curl -X POST "https://ss-empire-gateway.onrender.com/api/verify-utr" \
+curl -X POST "https://ssempire-paymentgateway.vercel.app/api/verify-utr" \
      -H "Content-Type: application/json" \
      -d '{"order_id": "TXN1789924627C92E", "utr": "426189123456"}'</pre>
           </div>

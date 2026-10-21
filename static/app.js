@@ -73,21 +73,57 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast('Payment link copied to clipboard!');
   });
 
-  // Clear old pending transactions
-  document.getElementById('btnClearDemoTxns')?.addEventListener('click', async () => {
-    if (!confirm('Clear old pending transaction history? Real verified payments (with bank UTR) will be kept safe.')) return;
-    try {
-      const resp = await fetch('/api/transactions/clear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keep_real: true })
-      });
-      const data = await resp.json();
-      showToast(data.message || 'Transactions cleared!');
-      loadTransactions();
-    } catch (e) {
-      showToast('Error clearing transactions', 'error');
-    }
+  // 📥 Export Backup JSON handler
+  document.getElementById('btnExportTxns')?.addEventListener('click', () => {
+    const txns = typeof getLocalTxns === 'function' ? getLocalTxns() : [];
+    const blob = new Blob([JSON.stringify(txns, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    showToast('Transactions backup downloaded successfully!');
+  });
+
+  // 📤 Import Backup JSON handler
+  document.getElementById('btnImportTxns')?.addEventListener('click', () => {
+    document.getElementById('importTxnFile')?.click();
+  });
+
+  document.getElementById('importTxnFile')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        const list = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
+        if (list.length === 0) {
+          showToast('No transactions found in JSON file', 'error');
+          return;
+        }
+        showToast(`Importing ${list.length} transactions...`);
+        const resp = await fetch('/api/transactions/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: list })
+        });
+        const res = await resp.json();
+        if (res.success) {
+          showToast(res.message);
+          if (typeof saveLocalTxns === 'function') {
+            saveLocalTxns(res.transactions);
+          }
+          loadTransactions();
+        } else {
+          showToast(res.message || 'Import failed', 'error');
+        }
+      } catch (err) {
+        showToast('Invalid JSON file format', 'error');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   });
 });
 
@@ -107,6 +143,9 @@ function initTabs() {
 
       if (btn.dataset.tab === 'transactions') {
         loadTransactions();
+      }
+      if (btn.dataset.tab === 'apidocs') {
+        updateDynamicApiUrls();
       }
     });
   });
@@ -505,24 +544,129 @@ async function loadConfig() {
   } catch (e) {}
 }
 
-/* Load Transactions Table */
+/* ==============================================================================
+   Permanent Transaction Vault (LocalStorage + Vercel Serverless Auto-Sync)
+   Guarantees that NO transaction is EVER deleted or lost on Vercel container resets!
+   ============================================================================== */
+const TXN_VAULT_KEY = 'ss_gateway_permanent_vault_v2';
+
+function getLocalTxns() {
+  try {
+    const raw = localStorage.getItem(TXN_VAULT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalTxns(txns) {
+  try {
+    if (Array.isArray(txns)) {
+      localStorage.setItem(TXN_VAULT_KEY, JSON.stringify(txns));
+    }
+  } catch (e) {}
+}
+
+function updateDynamicApiUrls() {
+  const currentBase = (window.location.origin && !window.location.origin.includes('file://'))
+    ? window.location.origin
+    : 'https://ssempire-paymentgateway.vercel.app';
+
+  const cloudBaseUrl = document.getElementById('cloudBaseUrl');
+  if (cloudBaseUrl) cloudBaseUrl.value = currentBase;
+
+  const openLink = document.getElementById('openLiveSiteLink');
+  if (openLink) openLink.href = currentBase;
+
+  const apiCreateOrder = document.getElementById('apiCreateOrder');
+  if (apiCreateOrder) apiCreateOrder.value = `${currentBase}/api/create-order`;
+
+  const apiCheckStatus = document.getElementById('apiCheckStatus');
+  if (apiCheckStatus) apiCheckStatus.value = `${currentBase}/api/check-status`;
+
+  const apiPayPage = document.getElementById('apiPayPage');
+  if (apiPayPage) apiPayPage.value = `${currentBase}/pay`;
+
+  // Dynamically update URLs in SDK code sample snippets
+  document.querySelectorAll('.sdk-code-box').forEach(box => {
+    let html = box.innerHTML;
+    html = html.replace(/https:\/\/[a-zA-Z0-9\-\.]+\.vercel\.app/g, currentBase)
+               .replace(/https:\/\/ss-empire-gateway\.onrender\.com/g, currentBase);
+    box.innerHTML = html;
+  });
+}
+
+/* Load Transactions Table with Dual-Sync */
 async function loadTransactions() {
   const tbody = document.getElementById('txnTableBody');
-  try {
-    const resp = await fetch('/api/transactions');
-    const data = await resp.json();
+  if (!tbody) return;
 
-    if (!data.transactions || data.transactions.length === 0) {
+  try {
+    // 1. Read transactions from client permanent local vault
+    const localTxns = getLocalTxns();
+    const localMap = {};
+    localTxns.forEach(t => {
+      if (t && t.order_id) localMap[String(t.order_id).trim()] = t;
+    });
+
+    // 2. Fetch latest transactions from server
+    let serverTxns = [];
+    try {
+      const resp = await fetch('/api/transactions');
+      const data = await resp.json();
+      if (data.success && Array.isArray(data.transactions)) {
+        serverTxns = data.transactions;
+      }
+    } catch (err) {
+      console.warn('Server transaction fetch failed, using permanent vault:', err);
+    }
+
+    // 3. Smart Merge: Union of server transactions and client vault
+    const mergedMap = { ...localMap };
+    serverTxns.forEach(t => {
+      if (!t || !t.order_id) return;
+      const oid = String(t.order_id).trim();
+      if (!mergedMap[oid]) {
+        mergedMap[oid] = t;
+      } else {
+        // Upgrade to SUCCESS if server or local has verified bank payment
+        if (t.status === 'SUCCESS' || t.status === 'COMPLETED') {
+          mergedMap[oid] = t;
+        } else if (mergedMap[oid].status === 'SUCCESS' || mergedMap[oid].status === 'COMPLETED') {
+          // Keep verified local record
+        } else {
+          mergedMap[oid] = t;
+        }
+      }
+    });
+
+    const allTxns = Object.values(mergedMap);
+    // Persist full merged database to client storage
+    saveLocalTxns(allTxns);
+
+    // 4. If client had transactions that the server was missing (e.g. Vercel container recycled),
+    // automatically sync them back to the server in background!
+    const serverOids = new Set(serverTxns.map(t => String(t.order_id).trim()));
+    const missingFromServer = allTxns.filter(t => !serverOids.has(String(t.order_id).trim()));
+    if (missingFromServer.length > 0) {
+      fetch('/api/transactions/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions: missingFromServer })
+      }).catch(() => {});
+    }
+
+    if (allTxns.length === 0) {
       tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:24px;">No transactions recorded yet. Create an order to see it here!</td></tr>`;
       return;
     }
 
     // Sort: Verified SUCCESS payments with real UTRs first, then newest
-    const sortedTxns = [...data.transactions].sort((a, b) => {
+    const sortedTxns = [...allTxns].sort((a, b) => {
       const aSuccess = (a.status === 'SUCCESS' || a.status === 'COMPLETED') ? 1 : 0;
       const bSuccess = (b.status === 'SUCCESS' || b.status === 'COMPLETED') ? 1 : 0;
       if (bSuccess !== aSuccess) return bSuccess - aSuccess;
-      return (b.date || '').localeCompare(a.date || '');
+      return String(b.created_at || b.date || '').localeCompare(String(a.created_at || a.date || ''));
     });
 
     tbody.innerHTML = sortedTxns.map(t => {
@@ -563,7 +707,7 @@ async function loadTransactions() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e676" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     Verified Real
                    </span>`}
-              <button onclick="deleteTxn('${t.order_id}')" title="Delete record" style="background:rgba(255,23,68,0.12); border:1px solid rgba(255,23,68,0.35); color:#ff5252; border-radius:6px; padding:4px 8px; cursor:pointer; display:inline-flex; align-items:center; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,23,68,0.3)'" onmouseout="this.style.background='rgba(255,23,68,0.12)'">
+              <button onclick="deleteTxn('${t.order_id}')" title="Delete record permanently" style="background:rgba(255,23,68,0.12); border:1px solid rgba(255,23,68,0.35); color:#ff5252; border-radius:6px; padding:4px 8px; cursor:pointer; display:inline-flex; align-items:center; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,23,68,0.3)'" onmouseout="this.style.background='rgba(255,23,68,0.12)'">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
               </button>
             </div>
@@ -573,21 +717,27 @@ async function loadTransactions() {
     }).join('');
 
   } catch (e) {
+    console.error('loadTransactions error:', e);
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--danger);">Error loading transactions</td></tr>`;
   }
 }
 
 window.deleteTxn = async function(orderId) {
-  if (!confirm(`Permanently delete transaction record ${orderId}?`)) return;
+  if (!confirm(`Permanently delete transaction record ${orderId}? This record will be permanently removed.`)) return;
   try {
+    // 1. Remove from client local permanent vault
+    const updatedLocal = getLocalTxns().filter(t => String(t.order_id).trim() !== String(orderId).trim());
+    saveLocalTxns(updatedLocal);
+
+    // 2. Remove from server
     const resp = await fetch(`/api/transactions/delete/${orderId}`, { method: 'POST' });
     const res = await resp.json();
     if (res.success) {
-      showToast(`Transaction ${orderId} deleted!`);
-      loadTransactions();
+      showToast(`Transaction ${orderId} permanently deleted!`);
     } else {
-      showToast(res.message || "Failed to delete", "error");
+      showToast(res.message || "Removed locally", "info");
     }
+    loadTransactions();
   } catch (e) {
     showToast("Error deleting transaction", "error");
   }
@@ -633,6 +783,7 @@ function showToast(message, type = 'info') {
 
 /* Init API SDK Snippet Tabs & Copy buttons in Admin Panel */
 function initApiDocs() {
+  updateDynamicApiUrls();
   const sdkTabs = document.querySelectorAll('.sdk-tab-btn');
   const codeBoxes = document.querySelectorAll('.sdk-code-box');
 

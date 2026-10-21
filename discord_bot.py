@@ -27,7 +27,7 @@ def load_config():
 
 
 cfg = load_config()
-GATEWAY_URL = os.environ.get('GATEWAY_URL') or cfg.get('gateway_url') or "https://ss-empire-gateway.onrender.com"
+GATEWAY_URL = os.environ.get('GATEWAY_URL') or cfg.get('gateway_url') or "https://ssempire-paymentgateway.vercel.app"
 DISCORD_TOKEN = os.environ.get('DISCORD_BOT_TOKEN') or cfg.get('discord_bot_token') or ""
 
 if not DISCORD_TOKEN or DISCORD_TOKEN == "YOUR_DISCORD_BOT_TOKEN_HERE":
