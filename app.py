@@ -221,6 +221,56 @@ def get_transaction(order_id):
             return t
     return None
 
+def auto_verify_pending_transactions(limit=10):
+    """
+    Scans pending transactions against gateway API so no incoming payment is EVER lost or missed!
+    """
+    txns = load_transactions()
+    updated = False
+    cfg = load_config()
+    token = cfg.get('user_token', '').strip()
+    base_url = cfg.get('terminalx_base_url', 'https://gateaway.pritam999.store').rstrip('/')
+    if not token:
+        return txns
+
+    count = 0
+    for t in txns:
+        if isinstance(t, dict) and t.get('status') == 'PENDING' and t.get('order_id'):
+            count += 1
+            if count > limit:
+                break
+            oid = str(t['order_id']).strip()
+            try:
+                resp = requests.post(f"{base_url}/api/check-order-status", data={
+                    'user_token': token,
+                    'order_id': oid
+                }, timeout=3)
+                res_json = safe_extract_json(resp)
+                status_val = str(res_json.get('status', '')).upper()
+                utr_val = res_json.get('utr')
+                paid_on = res_json.get('paidOn')
+                is_paid = (
+                    status_val in ['1', 'COMPLETED', 'SUCCESS'] or
+                    (paid_on is not None and str(paid_on).strip() != '' and str(paid_on) != 'null') or
+                    (utr_val not in [None, '', '0', 0])
+                )
+                if is_paid:
+                    t['status'] = 'SUCCESS'
+                    if utr_val and str(utr_val) != '0':
+                        t['utr'] = str(utr_val)
+                    elif not t.get('utr'):
+                        t['utr'] = 'TXN' + str(int(time.time()))
+                    if paid_on and str(paid_on) != 'null':
+                        t['date'] = str(paid_on)
+                    updated = True
+                    trigger_payment_success_notification(t)
+            except Exception:
+                pass
+
+    if updated:
+        save_transactions(txns)
+    return txns
+
 
 # ==============================================================================
 # DISCORD BOT DIRECT INTEGRATION (NAYUMI BOT WEBHOOK)
@@ -928,25 +978,6 @@ def check_status():
             "customer_name": txn.get('customer_name')
         })
 
-    # Check if order has expired
-    now_ts = int(time.time())
-    expires_at = txn.get('expires_at')
-    if not expires_at and txn.get('date'):
-        try:
-            dt = datetime.strptime(txn.get('date', ''), '%Y-%m-%d %H:%M:%S')
-            expires_at = int(dt.timestamp()) + 600
-        except Exception:
-            pass
-    if txn.get('status') == 'EXPIRED' or (txn.get('status') == 'PENDING' and expires_at and now_ts > expires_at):
-        txn['status'] = 'EXPIRED'
-        record_transaction(txn)
-        return jsonify({
-            "success": True,
-            "status": "EXPIRED",
-            "order_id": order_id,
-            "message": "Payment session has expired."
-        })
-
     # If order was created via TerminalX, poll TerminalX
     if txn.get('engine') == 'terminalx':
         cfg = load_config()
@@ -995,6 +1026,25 @@ def check_status():
                 })
         except Exception:
             pass
+
+    # Check if order has expired
+    now_ts = int(time.time())
+    expires_at = txn.get('expires_at')
+    if not expires_at and txn.get('date'):
+        try:
+            dt = datetime.strptime(txn.get('date', ''), '%Y-%m-%d %H:%M:%S')
+            expires_at = int(dt.timestamp()) + 600
+        except Exception:
+            pass
+    if txn.get('status') == 'EXPIRED' or (txn.get('status') == 'PENDING' and expires_at and now_ts > expires_at):
+        txn['status'] = 'EXPIRED'
+        record_transaction(txn)
+        return jsonify({
+            "success": True,
+            "status": "EXPIRED",
+            "order_id": order_id,
+            "message": "Payment session has expired."
+        })
 
     return jsonify({
         "success": True,
@@ -1119,7 +1169,7 @@ def simulate_success():
 
 @app.route('/api/transactions', methods=['GET'])
 def get_transactions():
-    txns = load_transactions()
+    txns = auto_verify_pending_transactions(limit=10)
     return jsonify({"success": True, "transactions": txns})
 
 
@@ -1235,20 +1285,32 @@ def clear_transactions():
             "transactions": txns
         })
     
-    global _IN_MEMORY_TXNS
-    _IN_MEMORY_TXNS.clear()
-    save_transactions([])
-    return jsonify({"success": True, "message": "All transactions cleared by admin override", "transactions": []})
+    txns = load_transactions()
+    preserved = [t for t in txns if t.get('status') in ['SUCCESS', 'COMPLETED']]
+    save_transactions(preserved)
+    return jsonify({
+        "success": True,
+        "message": f"Cleared temporary orders. All {len(preserved)} verified payments were preserved permanently.",
+        "transactions": preserved
+    })
 
 
 @app.route('/api/transactions/delete/<order_id>', methods=['POST', 'DELETE'])
 def delete_transaction(order_id):
     order_id = str(order_id).strip()
+    txn = get_transaction(order_id)
+    if txn and txn.get('status') in ['SUCCESS', 'COMPLETED']:
+        return jsonify({
+            "success": False,
+            "message": "Protection active: Verified SUCCESS transactions cannot be deleted.",
+            "transactions": load_transactions()
+        }), 400
+
     global _IN_MEMORY_TXNS
     _IN_MEMORY_TXNS.pop(order_id, None)
 
     txns = load_transactions()
-    new_txns = [t for t in txns if str(t.get('order_id', '')).strip() != order_id]
+    new_txns = [t for t in txns if str(t.get('order_id', '')).strip() != order_id or t.get('status') in ['SUCCESS', 'COMPLETED']]
     save_transactions(new_txns)
     return jsonify({"success": True, "message": f"Order {order_id} deleted permanently", "transactions": new_txns})
 

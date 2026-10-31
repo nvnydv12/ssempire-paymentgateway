@@ -561,11 +561,26 @@ function getLocalTxns() {
   }
 }
 
-function saveLocalTxns(txns) {
+function saveLocalTxns(newTxns) {
   try {
-    if (Array.isArray(txns)) {
-      localStorage.setItem(TXN_VAULT_KEY, JSON.stringify(txns));
-    }
+    if (!Array.isArray(newTxns)) return;
+    const existing = getLocalTxns();
+    const map = {};
+    existing.forEach(t => { if (t && t.order_id) map[String(t.order_id).trim()] = t; });
+    newTxns.forEach(t => {
+      if (!t || !t.order_id) return;
+      const oid = String(t.order_id).trim();
+      if (!map[oid]) {
+        map[oid] = t;
+      } else {
+        if (t.status === 'SUCCESS' || t.status === 'COMPLETED') {
+          map[oid] = t;
+        } else if (map[oid].status !== 'SUCCESS') {
+          map[oid] = t;
+        }
+      }
+    });
+    localStorage.setItem(TXN_VAULT_KEY, JSON.stringify(Object.values(map)));
   } catch (e) {}
 }
 
@@ -709,9 +724,15 @@ async function loadTransactions() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e676" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     Verified Real
                    </span>`}
-              <button onclick="deleteTxn('${t.order_id}')" title="Delete record permanently" style="background:rgba(255,23,68,0.12); border:1px solid rgba(255,23,68,0.35); color:#ff5252; border-radius:6px; padding:4px 8px; cursor:pointer; display:inline-flex; align-items:center; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,23,68,0.3)'" onmouseout="this.style.background='rgba(255,23,68,0.12)'">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-              </button>
+              ${!isSuccess ? `
+                <button onclick="deleteTxn('${t.order_id}')" title="Delete temporary record" style="background:rgba(255,23,68,0.12); border:1px solid rgba(255,23,68,0.35); color:#ff5252; border-radius:6px; padding:4px 8px; cursor:pointer; display:inline-flex; align-items:center; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,23,68,0.3)'" onmouseout="this.style.background='rgba(255,23,68,0.12)'">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+              ` : `
+                <span title="Permanent Record - Verified Real Payment" style="color:#00e676; opacity:0.85; padding:4px 6px; display:inline-flex; align-items:center;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </span>
+              `}
             </div>
           </td>
         </tr>
@@ -725,7 +746,13 @@ async function loadTransactions() {
 }
 
 window.deleteTxn = async function(orderId) {
-  if (!confirm(`Permanently delete transaction record ${orderId}? This record will be permanently removed.`)) return;
+  const localTxns = getLocalTxns();
+  const target = localTxns.find(t => String(t.order_id).trim() === String(orderId).trim());
+  if (target && (target.status === 'SUCCESS' || target.status === 'COMPLETED')) {
+    alert('Verified SUCCESS payment records are permanent and cannot be deleted.');
+    return;
+  }
+  if (!confirm(`Delete test order ${orderId}?`)) return;
   try {
     // 1. Remove from client local permanent vault
     const updatedLocal = getLocalTxns().filter(t => String(t.order_id).trim() !== String(orderId).trim());
