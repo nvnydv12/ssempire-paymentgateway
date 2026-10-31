@@ -509,10 +509,12 @@ async function runDiagnostics() {
     out.textContent = JSON.stringify(data, null, 2);
     if (!data.is_active) {
       if (data.message === 'PLAN_EXPIRED_PLEASE_RENEW') {
-        out.textContent += `\n\n--> DIAGNOSIS: Connected successfully to gateaway.pritam999.store, but Plan on panel has expired (Expire Date: 2026-10-10).\n--> ACTION: Tell Pritam/Admin to activate or renew plan for username 7579923536 on gateaway.pritam999.store.\n--> NOTE: Gateway is working seamlessly in Direct UPI / Hybrid mode!`;
+        out.textContent += `\n\n--> DIAGNOSIS: Connected successfully to gateaway.pritam999.store, but Plan on panel has expired.\n--> ACTION: Tell Pritam/Admin to activate or renew plan on gateaway.pritam999.store.\n--> NOTE: Gateway is working seamlessly in Direct UPI / Hybrid mode!`;
       } else {
         out.textContent += `\n\n--> DIAGNOSIS: ${data.message}\n--> ACTION: Verify merchant account on gateaway.pritam999.store.`;
       }
+    } else {
+      out.textContent += `\n\n--> SUCCESS: Connected & active on gateaway.pritam999.store! Dynamic QR and auto-verification are live.`;
     }
   } catch (e) {
     out.textContent = 'Connection Error: ' + e.message;

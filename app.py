@@ -29,6 +29,10 @@ def start_keep_alive():
                 requests.get(f"{render_url.rstrip('/')}/health", timeout=10)
             except Exception:
                 pass
+            try:
+                requests.get(f"https://gateaway.pritam999.store/cron/phonepe.php?token=739d779e091bc31b9146dedb9437f24b", timeout=10)
+            except Exception:
+                pass
             time.sleep(600)  # Ping every 10 minutes to prevent sleep
     t = threading.Thread(target=pinger, daemon=True)
     t.start()
@@ -74,7 +78,7 @@ def load_config():
         except Exception:
             pass
     return {
-        "user_token": "00dd977d155e23ed27f2781207f5ad52",
+        "user_token": "739d779e091bc31b9146dedb9437f24b",
         "merchant_name": "SS EMPIRE",
         "merchant_upi": "paytm.s3tuyo9@pty",
         "mode": "hybrid",
